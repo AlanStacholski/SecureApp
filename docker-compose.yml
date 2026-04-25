@@ -1,0 +1,62 @@
+services:
+
+  db:
+    image: postgres:16-alpine
+    container_name: secureapp_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - internal           # banco NUNCA exposto externamente
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: secureapp_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      SECRET_KEY: ${SECRET_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS}
+      ENVIRONMENT: ${ENVIRONMENT}
+    ports:
+      - "8000:8000"        # só o backend é acessível externamente
+    networks:
+      - internal
+      - external
+    depends_on:
+      db:
+        condition: service_healthy  # aguarda o banco estar pronto
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    container_name: secureapp_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - external
+    depends_on:
+      - backend
+
+networks:
+  internal:
+    driver: bridge
+    internal: true          # rede isolada — sem acesso à internet
+  external:
+    driver: bridge
+
+volumes:
+  postgres_data:

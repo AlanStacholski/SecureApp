@@ -1,0 +1,16 @@
+https://github.com/AlanStacholski/SecureApp
+
+git init
+git add .
+git status               # confirme que .env NÃO aparece na lista
+git commit -m "feat: initial security architecture setup
+
+- Docker Compose com isolamento de rede
+- PostgreSQL com Row-Level Security
+- FastAPI com Pydantic validation
+- Secrets via environment variables
+- Usuário não-root no container"
+
+git branch -M main
+git remote add origin https://github.com/SEU_USUARIO/secureapp.git
+git push -u origin main
