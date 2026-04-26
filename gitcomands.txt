@@ -12,5 +12,5 @@ git commit -m "feat: initial security architecture setup
 - Usuário não-root no container"
 
 git branch -M main
-git remote add origin https://github.com/SEU_USUARIO/secureapp.git
+git remote add origin https://github.com/AlanStacholski/SecureApp
 git push -u origin main

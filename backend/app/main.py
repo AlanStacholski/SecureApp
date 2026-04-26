@@ -4,6 +4,7 @@ from slowapi.errors import RateLimitExceeded
 from app.config import get_settings
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
+from app.routers import auth, users
 
 settings = get_settings()
 
@@ -37,7 +38,6 @@ async def health():
     return {"status": "ok", "environment": settings.ENVIRONMENT}
 
 
-# Routers adicionados na próxima etapa
-# from app.routers import auth, users
-# app.include_router(auth.router, prefix="/auth", tags=["auth"])
-# app.include_router(users.router, prefix="/users", tags=["users"])
+# Routers
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(users.router, prefix="/users", tags=["users"])

@@ -1,0 +1,113 @@
+name: Security Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ============================================================
+  # 1. Secrets scanning — nenhum segredo no repositório
+  # ============================================================
+  secrets-scan:
+    name: Secrets Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for secrets (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================
+  # 2. Dependency check — vulnerabilidades conhecidas (CVEs)
+  # ============================================================
+  dependency-check:
+    name: Dependency Vulnerability Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install pip-audit
+          pip install -r backend/requirements.txt
+
+      - name: Audit dependencies for CVEs
+        run: pip-audit -r backend/requirements.txt
+
+  # ============================================================
+  # 3. SAST — análise estática de código (Semgrep)
+  # ============================================================
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/python
+            p/flask
+            p/jwt
+            p/owasp-top-ten
+            p/secrets
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  # ============================================================
+  # 4. Lint e formatação
+  # ============================================================
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install linters
+        run: pip install ruff bandit
+
+      - name: Ruff lint
+        run: ruff check backend/
+
+      - name: Bandit security lint
+        # Bandit analisa código Python em busca de padrões inseguros
+        run: bandit -r backend/app/ -ll
+
+  # ============================================================
+  # 5. Build do container — verifica se o Docker build não quebra
+  # ============================================================
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [secrets-scan, dependency-check, sast, lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t secureapp-backend ./backend
+
+      - name: Scan container image (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: secureapp-backend
+          format: table
+          exit-code: 1               # falha o pipeline se encontrar CVE crítico
+          severity: CRITICAL,HIGH
