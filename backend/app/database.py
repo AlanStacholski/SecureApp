@@ -7,7 +7,7 @@ settings = get_settings()
 
 # Engine assíncrono com pool de conexões
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.DATABASE_URL,connect_args={"ssl": False},
     echo=settings.ENVIRONMENT == "development",  # log de SQL só em dev
     pool_size=10,
     max_overflow=20,
