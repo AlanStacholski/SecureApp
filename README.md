@@ -3,7 +3,7 @@
 
 > A user management system intentionally built simple — so the security architecture around it can speak for itself.
 
-[![Security Pipeline](https://github.com/seu-usuario/secureapp/actions/workflows/security.yml/badge.svg)](https://github.com/seu-usuario/secureapp/actions)
+[![Security Pipeline](https://github.com/AlanStacholski/SecureApp/actions/workflows/security.yml/badge.svg)](https://github.com/AlanStacholski/SecureApp/actions)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.111-green)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)
