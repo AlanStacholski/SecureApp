@@ -1,130 +1,130 @@
 # Threat Model — SecureApp
-**Metodologia:** STRIDE  
-**Data:** 2024  
-**Autor:** Alan Stacholski  
+**Methodology:** STRIDE
+**Date:** 2024
+**Author:** Alan Stacholski
 
 ---
 
-## 1. Escopo e Assets
+## 1. Scope and Assets
 
-### Assets protegidos
-| Asset | Classificação | Impacto se comprometido |
+### Protected assets
+| Asset | Classification | Impact if compromised |
 |---|---|---|
-| Senhas dos usuários | Crítico | Credential stuffing em outros serviços |
-| Tokens JWT | Alto | Acesso não autorizado à API |
-| Dados pessoais (email, nome) | Alto | Violação de LGPD/GDPR |
-| Audit logs | Médio | Perda de evidência forense |
-| Segredos da aplicação (.env) | Crítico | Comprometimento total do sistema |
+| User passwords | Critical | Credential stuffing against other services |
+| JWT tokens | High | Unauthorized API access |
+| Personal data (email, name) | High | LGPD / GDPR violation |
+| Audit logs | Medium | Loss of forensic evidence |
+| Application secrets (.env) | Critical | Full system compromise |
 
-### Atores
-- **Usuário autenticado** — acesso ao próprio perfil
-- **Administrador** — acesso total via RBAC
-- **Atacante externo** — sem credenciais válidas
-- **Atacante interno** — usuário legítimo com intenção maliciosa
+### Actors
+- **Authenticated user** — access to own profile only
+- **Administrator** — full access via RBAC
+- **External attacker** — no valid credentials
+- **Internal attacker** — legitimate user with malicious intent
 
 ---
 
-## 2. Diagrama de Fluxo de Dados
+## 2. Data Flow Diagram
 
 ```
 [Browser] ──HTTPS──> [Frontend :3000]
                            │
-                           │ HTTP (rede interna Docker)
+                           │ HTTP (Docker internal network)
                            ▼
-[Browser] ──HTTPS──> [Backend :8000]
+                    [Backend :8000]
                            │
-                     rede interna
-                     (sem acesso externo)
+                     internal network
+                     (no external route)
                            │
                            ▼
                     [PostgreSQL :5432]
 ```
 
-**Zonas de confiança:**
+**Trust zones:**
 - `external`: Browser ↔ Frontend ↔ Backend
-- `internal`: Backend ↔ PostgreSQL (isolado, sem rota externa)
+- `internal`: Backend ↔ PostgreSQL (isolated, no external route)
 
 ---
 
-## 3. Análise STRIDE
+## 3. STRIDE Analysis
 
-### S — Spoofing (Falsificação de Identidade)
+### S — Spoofing (Identity Forgery)
 
-| Ameaça | Vetor | Controle implementado |
+| Threat | Attack vector | Control implemented |
 |---|---|---|
-| Atacante usa credenciais roubadas | Login com email/senha de outro usuário | bcrypt rounds=12 dificulta brute force offline |
-| Reutilização de token expirado | Replay de JWT antigo | Expiração de 15min + verificação de `exp` |
-| Forge de JWT | Assinar token com chave fraca | SECRET_KEY >= 32 chars validada na inicialização |
-| Session fixation | Reutilizar refresh token após logout | Revogação de todos os tokens no logout |
+| Attacker uses stolen credentials | Login with another user's email/password | bcrypt rounds=12 makes offline brute force impractical |
+| Expired token reuse | JWT replay attack | 15min expiration + `exp` claim verification |
+| JWT forgery | Signing token with a weak key | SECRET_KEY >= 32 chars validated at startup (fail fast) |
+| Session fixation | Reusing refresh token after logout | All tokens revoked on logout |
 
-### T — Tampering (Adulteração)
+### T — Tampering (Data Manipulation)
 
-| Ameaça | Vetor | Controle implementado |
+| Threat | Attack vector | Control implemented |
 |---|---|---|
-| SQL Injection | Input malicioso nas rotas | SQLAlchemy ORM com queries parametrizadas |
-| Adulteração de payload JWT | Modificar claims do token | Assinatura HMAC-SHA256 detecta qualquer alteração |
-| Modificar dados de outro usuário | PUT /users/{id} sem autorização | RBAC: apenas admin ou dono do recurso |
-| Injeção de scripts (XSS) | Input com `<script>` | Pydantic sanitiza input + CSP header bloqueia execução |
+| SQL Injection | Malicious input in routes | SQLAlchemy ORM with parameterized queries |
+| JWT payload tampering | Modifying token claims | HMAC-SHA256 signature detects any alteration |
+| Modifying another user's data | PUT /users/{id} without authorization | RBAC: only admin or resource owner |
+| XSS injection | Input containing `<script>` | Pydantic sanitizes input + CSP header blocks execution |
 
-### R — Repudiation (Repúdio)
+### R — Repudiation
 
-| Ameaça | Vetor | Controle implementado |
+| Threat | Attack vector | Control implemented |
 |---|---|---|
-| Usuário nega ter feito uma ação | "Não fui eu que deletei" | Audit log com IP, user_agent, timestamp e user_id |
-| Atacante apaga rastros | DELETE em audit_logs | Tabela sem rota de deleção — append-only por design |
+| User denies an action | "I didn't delete that" | Audit log with IP, user_agent, timestamp and user_id |
+| Attacker erases traces | DELETE on audit_logs | Table has no delete route — append-only by design |
 
-### I — Information Disclosure (Divulgação de Informação)
+### I — Information Disclosure
 
-| Ameaça | Vetor | Controle implementado |
+| Threat | Attack vector | Control implemented |
 |---|---|---|
-| Vazar password_hash via API | GET /users retorna hash | Schema Pydantic nunca inclui password_hash no response |
-| Enumerar usuários válidos | Tempo de resposta diferente para email inexistente | Timing attack prevention com dummy hash |
-| Vazar stack trace em erros | Exceção não tratada expõe código interno | FastAPI retorna apenas mensagem genérica em produção |
-| Vazar segredos via repositório | .env commitado no git | .gitignore + .env.example sem valores reais |
-| Vazar Server/framework header | Header `Server: uvicorn` | Middleware remove headers que revelam stack |
+| Leaking password_hash via API | GET /users returns hash | Pydantic response schema never includes password_hash |
+| User enumeration | Different response time for invalid email | Timing attack prevention with dummy hash |
+| Leaking stack trace on errors | Unhandled exception exposes internal code | FastAPI returns generic message in production |
+| Leaking secrets via repository | .env committed to git | .gitignore + .env.example with no real values |
+| Leaking Server/framework header | `Server: uvicorn` response header | Middleware removes headers that reveal the stack |
 
-### D — Denial of Service (Negação de Serviço)
+### D — Denial of Service
 
-| Ameaça | Vetor | Controle implementado |
+| Threat | Attack vector | Control implemented |
 |---|---|---|
-| Brute force no login | 10.000 tentativas de senha | Rate limit: 10 req/min por IP no /auth/login |
-| Flood de registro | Criar milhares de contas | Rate limit: 5 req/min por IP no /auth/register |
-| Exaustão de conexões do banco | Muitas conexões simultâneas | Pool de conexões com limite (pool_size=10) |
-| Payload gigante | Request body de 100MB | FastAPI limita body por padrão |
+| Login brute force | 10,000 password attempts | Rate limit: 10 req/min per IP on /auth/login |
+| Registration flood | Creating thousands of accounts | Rate limit: 5 req/min per IP on /auth/register |
+| Database connection exhaustion | Too many simultaneous connections | Connection pool with limit (pool_size=10) |
+| Oversized payload | 100MB request body | FastAPI enforces body size limit by default |
 
-### E — Elevation of Privilege (Escalada de Privilégio)
+### E — Elevation of Privilege
 
-| Ameaça | Vetor | Controle implementado |
+| Threat | Attack vector | Control implemented |
 |---|---|---|
-| Usuário comum acessa rota admin | GET /users sem role=admin | Dependency `require_admin` em todas as rotas admin |
-| Usuário edita outro usuário | PUT /users/{outro_id} | Verificação: só admin ou dono do recurso |
-| Container como root | Processo rodando como root | Dockerfile: USER appuser (não-root) |
-| Banco acessível externamente | Conexão direta ao PostgreSQL | Rede Docker `internal: true` — banco sem rota externa |
-| Bypass de RLS via SQL direto | Query sem SET LOCAL | Banco sem usuário público com acesso irrestrito |
+| Regular user accessing admin routes | GET /users without role=admin | `require_admin` dependency on all admin routes |
+| User editing another user | PUT /users/{other_id} | Check: only admin or resource owner allowed |
+| Container running as root | Process with root privileges | Dockerfile: USER appuser (non-root) |
+| Database accessible externally | Direct PostgreSQL connection | Docker `internal: true` network — no external route |
+| RLS bypass via direct SQL | Query without SET LOCAL | No public user with unrestricted access to the database |
 
 ---
 
-## 4. Riscos Residuais
+## 4. Residual Risks
 
-| Risco | Probabilidade | Impacto | Mitigação futura |
+| Risk | Likelihood | Impact | Future mitigation |
 |---|---|---|---|
-| Comprometimento do SECRET_KEY | Baixa | Crítico | Rotação periódica de chaves, HSM em produção |
-| DDoS volumétrico | Média | Alto | CDN / WAF (Cloudflare) em produção |
-| Vulnerabilidade em dependência | Alta | Variável | Dependabot + pip-audit no pipeline |
-| Insider threat (admin malicioso) | Baixa | Alto | MFA para admins, alertas em ações críticas |
+| SECRET_KEY compromise | Low | Critical | Periodic key rotation, HSM in production |
+| Volumetric DDoS | Medium | High | CDN / WAF (Cloudflare) in production |
+| Vulnerable dependency | High | Variable | Dependabot + Safety in pipeline |
+| Malicious admin (insider threat) | Low | High | MFA for admins, alerts on critical actions |
 
 ---
 
-## 5. Controles por Camada (Defense in Depth)
+## 5. Defense in Depth — Controls by Layer
 
 ```
-Camada 1 — Rede:      Docker network internal, sem exposição do banco
-Camada 2 — Aplicação: Rate limit, CORS, Security Headers, HTTPS
-Camada 3 — Autenticação: JWT 15min, bcrypt 12 rounds, refresh rotation
-Camada 4 — Autorização: RBAC via dependency injection
-Camada 5 — Dados: Pydantic validation, ORM parametrizado, RLS no banco
-Camada 6 — Auditoria: Audit log append-only, IP + user_agent + timestamp
-Camada 7 — Pipeline: Secrets scan, SAST, CVE check, container scan
+Layer 1 — Network:        Docker internal network, database not exposed externally
+Layer 2 — Application:    Rate limit, CORS, Security Headers, HTTPS
+Layer 3 — Authentication: JWT 15min, bcrypt 12 rounds, refresh token rotation
+Layer 4 — Authorization:  RBAC via dependency injection
+Layer 5 — Data:           Pydantic validation, parameterized ORM, RLS in database
+Layer 6 — Audit:          Append-only audit log, IP + user_agent + timestamp
+Layer 7 — Pipeline:       Secrets scan, SAST, CVE check, container scan
 ```
 
-**Princípio:** se uma camada falhar, as outras contêm o dano.
+**Principle:** if one layer fails, the others contain the damage.

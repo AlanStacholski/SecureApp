@@ -3,7 +3,7 @@
 
 > A user management system intentionally built simple — so the security architecture around it can speak for itself.
 
-[![Security Pipeline](https://github.com/AlanStacholski/SecureApp/actions/workflows/security.yml/badge.svg)](https://github.com/AlanStacholski/SecureApp/actions)
+[![Security Pipeline](https://github.com/AlanStacholski/SecureApp/actions/workflows/securiy.yml/badge.svg?branch=main)](https://github.com/AlanStacholski/SecureApp/actions/workflows/securiy.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.111-green)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)
@@ -22,7 +22,7 @@ This is not a tutorial project. Every decision here was made intentionally to de
 | **Authorization** | RBAC via dependency injection, Row-Level Security in PostgreSQL | Two independent authorization layers |
 | **Infrastructure** | Docker network isolation, non-root container user | Limits blast radius of a compromise |
 | **Observability** | Append-only audit log with IP, user-agent, timestamp | Forensic evidence that can't be erased |
-| **Pipeline** | SAST (Semgrep), secrets scan (Gitleaks), CVE check, container scan (Trivy) | Security integrated into the development workflow |
+| **Pipeline** | SAST (Semgrep), secrets scan (Gitleaks), CVE check (Safety), container scan (Trivy) | Security integrated into the development workflow |
 | **Documentation** | STRIDE Threat Model, ADRs, NIST CSF mapping | Shows architectural thinking, not just implementation |
 
 ---
@@ -78,13 +78,31 @@ Full threat model: [THREAT_MODEL.md](./THREAT_MODEL.md)
 
 ---
 
+## Real Challenges Encountered
+
+Building this project involved real problems that required deliberate engineering decisions:
+
+**🔧 Semgrep flagged a false positive — hardcoded bcrypt hash**
+The `dummy_hash` in `auth_service.py` was detected as a hardcoded credential. It's actually an intentional bcrypt hash used to prevent timing attacks — ensuring login response time is identical whether the email exists or not. Without it, an attacker can enumerate valid accounts by measuring response times. Fix: `.semgrepignore` with a technical comment documenting the intent.
+
+**🔧 pip-audit failed due to a dependency conflict**
+FastAPI manages `starlette` internally — pinning its version explicitly caused a resolution conflict in the GitHub Actions environment. Fix: migrated to `safety`, which reads `requirements.txt` directly without installing packages.
+
+**🔧 Content Security Policy broke Swagger UI**
+The security headers middleware applied CSP to all routes, including `/docs`. Swagger loads inline scripts that `script-src 'self'` blocked. Fix: conditional CSP — only applied in production environments.
+
+**🔧 `MutableHeaders` has no `.pop()` method**
+Starlette's `MutableHeaders` doesn't implement `.pop()` like a standard Python dict. Fix: replaced with `try/except` using `del response.headers["key"]`.
+
+---
+
 ## Tech Stack
 
 - **Backend:** Python 3.12 + FastAPI + SQLAlchemy (async)
 - **Database:** PostgreSQL 16 with Row-Level Security
 - **Auth:** JWT + bcrypt + Refresh Token Rotation
 - **Orchestration:** Docker Compose
-- **Pipeline:** GitHub Actions — Semgrep, Gitleaks, pip-audit, Trivy
+- **Pipeline:** GitHub Actions — Semgrep, Gitleaks, Safety, Trivy, Bandit
 
 ---
 
@@ -94,12 +112,14 @@ Full threat model: [THREAT_MODEL.md](./THREAT_MODEL.md)
 
 ```bash
 # 1. Clone
-git clone https://github.com/seu-usuario/secureapp.git
-cd secureapp
+git clone https://github.com/AlanStacholski/SecureApp.git
+cd SecureApp
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env — generate SECRET_KEY with: openssl rand -hex 32
+# Edit .env — generate SECRET_KEY with:
+# Linux/Mac:  openssl rand -hex 32
+# Windows:    -join ((1..32) | ForEach {'{0:X2}' -f (Get-Random -Max 256)})
 
 # 3. Start
 docker compose up --build
@@ -119,8 +139,8 @@ docker compose up --build
 3. **Login** → `POST /auth/login` — copy the `access_token`
 4. Click **Authorize** (top right) and paste the token
 5. Try `GET /users/me` — returns your profile
-6. Try `GET /users/` as a regular user — returns `403 Forbidden` (RBAC working)
-7. Try `POST /auth/login` 11 times — returns `429 Too Many Requests` (rate limit working)
+6. Try `GET /users/` as a regular user — returns `403 Forbidden` *(RBAC working)*
+7. Try `POST /auth/login` 11 times — returns `429 Too Many Requests` *(rate limit working)*
 
 ---
 
@@ -136,9 +156,16 @@ docker compose up --build
 
 ---
 
+## Documentation
+
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — design decisions and ADRs
+- [THREAT_MODEL.md](./THREAT_MODEL.md) — full STRIDE threat model
+
+---
+
 ## Author
 
 **Alan Stacholski** — Security Engineer | Software Developer  
 🌐 [stacholski.com.br](https://stacholski.com.br)  
-💼 [LinkedIn](https://linkedin.com/in/seu-perfil)  
-🐙 [GitHub](https://github.com/seu-usuario)
+💼 [LinkedIn](https://www.linkedin.com/in/alan-jones-stacholski-j%C3%BAnior-019763181/)  
+🐙 [GitHub](https://github.com/AlanStacholski)
