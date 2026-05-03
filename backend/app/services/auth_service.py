@@ -112,7 +112,7 @@ async def authenticate_user(
     user = result.scalar_one_or_none()
 
     # Verifica senha mesmo se usuário não existe (timing attack prevention)
-    dummy_hash = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/HS.iCte"
+    dummy_hash = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/HS.iCte"  # nosemgrep: generic.secrets.security.detected-bcrypt-hash
     password_to_check = user.password_hash if user else dummy_hash
     is_valid = verify_password(password, password_to_check)
 
